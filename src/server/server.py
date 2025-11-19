@@ -187,15 +187,9 @@ class NewsServer:
 
         elif msg_type == MessageType.LIST_CATEGORIES:
             categories = self.subscription_manager.get_available_categories()
-            subscriptions = self.subscription_manager.get_client_subscriptions(client_socket)
 
             response = Message.categories_list(categories)
             self._send_to_client(client_socket, response)
-
-            # Envia informação sobre assinaturas apenas se houver assinaturas
-            if subscriptions:
-                info = Message.success(f"Suas assinaturas: {', '.join(sorted(subscriptions))}")
-                self._send_to_client(client_socket, info)
 
         elif msg_type == MessageType.HISTORY:
             # Cliente solicitou histórico de notícias

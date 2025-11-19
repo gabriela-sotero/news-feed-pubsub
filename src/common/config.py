@@ -13,7 +13,7 @@ DEFAULT_CATEGORIES = [
     "tecnologia",
     "esportes",
     "cultura",
-    "política",
+    "politica",
     "economia",
     "entretenimento"
 ]
