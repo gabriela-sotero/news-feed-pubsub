@@ -139,6 +139,21 @@ class NewsClient:
             categories = data.get("categories", [])
             print(f"\nCategorias disponíveis: {', '.join(categories)}")
 
+        elif msg_type == MessageType.NEWS_HISTORY:
+            news_list = data.get("news", [])
+            if not news_list:
+                print("\nNenhuma notícia encontrada no histórico.")
+            else:
+                print(f"\n{'='*60}")
+                print(f"📚 HISTÓRICO - {len(news_list)} notícia(s)")
+                print(f"{'='*60}")
+                for news in news_list:
+                    print(f"\n[{news['category'].upper()}] {news['title']}")
+                    print(f"Resumo: {news['summary']}")
+                    print(f"Data: {news['timestamp'][:19].replace('T', ' ')}")
+                    print(f"{'-'*60}")
+                print()
+
     def _send_message(self, message: str):
         """
         Envia uma mensagem para o servidor.
@@ -165,6 +180,10 @@ class NewsClient:
         """Lista categorias disponíveis"""
         self._send_message(Message.create(MessageType.LIST_CATEGORIES))
 
+    def request_history(self, category: str = None, limit: int = 10):
+        """Solicita histórico de notícias"""
+        self._send_message(Message.request_history(category, limit))
+
     def run_interactive(self):
         """Executa o cliente em modo interativo"""
         if not self.connect():
@@ -174,11 +193,15 @@ class NewsClient:
         print("  INSCREVER <categorias> - Inscreve em uma ou mais categorias (separadas por vírgula)")
         print("  REMOVER <categorias>   - Remove inscrição de uma ou mais categorias")
         print("  LISTAR                 - Lista categorias disponíveis")
+        print("  HISTÓRICO [categoria] [N] - Lista notícias do histórico")
         print("  SAIR                   - Desconecta do servidor")
         print("\nExemplos:")
         print("  INSCREVER tecnologia")
         print("  INSCREVER cultura, tecnologia")
         print("  REMOVER esportes, política")
+        print("  HISTÓRICO              (últimas 10 notícias)")
+        print("  HISTÓRICO cultura      (últimas 10 de cultura)")
+        print("  HISTÓRICO esportes 5   (últimas 5 de esportes)")
         print()
 
         try:
@@ -215,12 +238,30 @@ class NewsClient:
                     elif cmd == "LISTAR":
                         self.list_categories()
 
+                    elif cmd == "HISTÓRICO" or cmd == "HISTORICO":
+                        # Parse argumentos: HISTÓRICO [categoria] [limite]
+                        category = None
+                        limit = 10
+
+                        if len(parts) > 1:
+                            args = parts[1].split()
+                            if len(args) >= 1:
+                                # Verifica se o primeiro argumento é um número
+                                if args[0].isdigit():
+                                    limit = int(args[0])
+                                else:
+                                    category = args[0].lower()
+                                    if len(args) >= 2 and args[1].isdigit():
+                                        limit = int(args[1])
+
+                        self.request_history(category, limit)
+
                     elif cmd == "SAIR":
                         break
 
                     else:
                         print(f"✗ Comando desconhecido: {cmd}")
-                        print("Use: INSCREVER, REMOVER, LISTAR ou SAIR")
+                        print("Use: INSCREVER, REMOVER, LISTAR, HISTÓRICO ou SAIR")
 
                 except EOFError:
                     break

@@ -197,6 +197,28 @@ class NewsServer:
                 info = Message.success(f"Suas assinaturas: {', '.join(sorted(subscriptions))}")
                 self._send_to_client(client_socket, info)
 
+        elif msg_type == MessageType.HISTORY:
+            # Cliente solicitou histórico de notícias
+            category = data.get("category")
+            limit = data.get("limit", 10)
+
+            if category:
+                # Histórico de uma categoria específica
+                if category in self.subscription_manager.get_available_categories():
+                    news_list = self.news_storage.get_news_by_category(category, limit)
+                    print(f"[Cliente {client_id}] HISTÓRICO {category}: {len(news_list)} notícias")
+                else:
+                    response = Message.error(f"Categoria '{category}' inválida")
+                    self._send_to_client(client_socket, response)
+                    return
+            else:
+                # Histórico geral
+                news_list = self.news_storage.get_all_news(limit)
+                print(f"[Cliente {client_id}] HISTÓRICO geral: {len(news_list)} notícias")
+
+            response = Message.news_history(news_list)
+            self._send_to_client(client_socket, response)
+
         elif msg_type == MessageType.PUBLISH:
             # Recebe notícia de um editor
             title = data.get("title", "")

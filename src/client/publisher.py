@@ -37,7 +37,7 @@ class NewsPublisher:
             self.connected = True
             self.running = True
 
-            print(f"[Publicador] Conectado ao servidor {self.host}:{self.port}\n")
+            print(f"[Editor] Conectado ao servidor {self.host}:{self.port}\n")
 
             # Inicia thread para receber respostas
             receive_thread = threading.Thread(target=self._receive_messages)
@@ -47,11 +47,11 @@ class NewsPublisher:
             return True
 
         except ConnectionRefusedError:
-            print(f"[Publicador] Erro: Não foi possível conectar ao servidor {self.host}:{self.port}")
-            print("[Publicador] Certifique-se de que o servidor está rodando.")
+            print(f"[Editor] Erro: Não foi possível conectar ao servidor {self.host}:{self.port}")
+            print("[Editor] Certifique-se de que o servidor está rodando.")
             return False
         except Exception as e:
-            print(f"[Publicador] Erro ao conectar: {e}")
+            print(f"[Editor] Erro ao conectar: {e}")
             return False
 
     def disconnect(self):
@@ -71,7 +71,7 @@ class NewsPublisher:
             except:
                 pass
 
-        print("\n[Publicador] Desconectado do servidor")
+        print("\n[Editor] Desconectado do servidor")
 
     def _receive_messages(self):
         """Thread que recebe respostas do servidor"""
@@ -82,7 +82,7 @@ class NewsPublisher:
                 data = self.socket.recv(BUFFER_SIZE).decode(ENCODING)
 
                 if not data:
-                    print("\n[Publicador] Servidor desconectou")
+                    print("\n[Editor] Servidor desconectou")
                     self.connected = False
                     break
 
@@ -95,11 +95,11 @@ class NewsPublisher:
                         self._handle_message(raw_msg)
 
         except ConnectionResetError:
-            print("\n[Publicador] Conexão perdida com o servidor")
+            print("\n[Editor] Conexão perdida com o servidor")
             self.connected = False
         except Exception as e:
             if self.running:
-                print(f"\n[Publicador] Erro ao receber mensagem: {e}")
+                print(f"\n[Editor] Erro ao receber mensagem: {e}")
                 self.connected = False
 
     def _handle_message(self, raw_message: str):
@@ -125,6 +125,21 @@ class NewsPublisher:
             categories = data.get("categories", [])
             print(f"\nCategorias disponíveis: {', '.join(categories)}")
 
+        elif msg_type == MessageType.NEWS_HISTORY:
+            news_list = data.get("news", [])
+            if not news_list:
+                print("\nNenhuma notícia encontrada no histórico.")
+            else:
+                print(f"\n{'='*60}")
+                print(f"📚 HISTÓRICO - {len(news_list)} notícia(s)")
+                print(f"{'='*60}")
+                for news in news_list:
+                    print(f"\n[{news['category'].upper()}] {news['title']}")
+                    print(f"Resumo: {news['summary']}")
+                    print(f"Data: {news['timestamp'][:19].replace('T', ' ')}")
+                    print(f"{'-'*60}")
+                print()
+
     def _send_message(self, message: str):
         """
         Envia uma mensagem para o servidor.
@@ -136,7 +151,7 @@ class NewsPublisher:
             try:
                 self.socket.sendall(message.encode(ENCODING))
             except Exception as e:
-                print(f"[Publicador] Erro ao enviar mensagem: {e}")
+                print(f"[Editor] Erro ao enviar mensagem: {e}")
                 self.connected = False
 
     def publish_news(self, title: str, summary: str, category: str):
@@ -155,6 +170,10 @@ class NewsPublisher:
         """Lista categorias disponíveis"""
         self._send_message(Message.create(MessageType.LIST_CATEGORIES))
 
+    def request_history(self, category: str = None, limit: int = 10):
+        """Solicita histórico de notícias"""
+        self._send_message(Message.request_history(category, limit))
+
     def run_interactive(self):
         """Executa o publicador em modo interativo"""
         if not self.connect():
@@ -164,7 +183,12 @@ class NewsPublisher:
         print("\nComandos disponíveis:")
         print("  PUBLICAR               - Publica uma nova notícia")
         print("  LISTAR                 - Lista categorias disponíveis")
+        print("  HISTÓRICO [categoria] [N] - Lista notícias do histórico")
         print("  SAIR                   - Desconecta do servidor")
+        print("\nExemplos de HISTÓRICO:")
+        print("  HISTÓRICO              (últimas 10 notícias)")
+        print("  HISTÓRICO cultura      (últimas 10 de cultura)")
+        print("  HISTÓRICO esportes 5   (últimas 5 de esportes)")
         print()
 
         try:
@@ -183,12 +207,31 @@ class NewsPublisher:
                     elif cmd == "LISTAR":
                         self.list_categories()
 
+                    elif cmd.startswith("HISTÓRICO") or cmd.startswith("HISTORICO"):
+                        # Parse argumentos: HISTÓRICO [categoria] [limite]
+                        category = None
+                        limit = 10
+
+                        parts = command.split(maxsplit=1)
+                        if len(parts) > 1:
+                            args = parts[1].split()
+                            if len(args) >= 1:
+                                # Verifica se o primeiro argumento é um número
+                                if args[0].isdigit():
+                                    limit = int(args[0])
+                                else:
+                                    category = args[0].lower()
+                                    if len(args) >= 2 and args[1].isdigit():
+                                        limit = int(args[1])
+
+                        self.request_history(category, limit)
+
                     elif cmd == "SAIR":
                         break
 
                     else:
                         print(f"✗ Comando desconhecido: {cmd}")
-                        print("Use: PUBLICAR, LISTAR ou SAIR")
+                        print("Use: PUBLICAR, LISTAR, HISTÓRICO ou SAIR")
 
                 except EOFError:
                     break
@@ -239,7 +282,7 @@ class NewsPublisher:
 
         import time
 
-        print(f"[Publicador] Modo automático - {len(news_list)} notícias para publicar\n")
+        print(f"[Editor] Modo automático - {len(news_list)} notícias para publicar\n")
 
         for i, news in enumerate(news_list, 1):
             if not self.connected:
@@ -255,7 +298,7 @@ class NewsPublisher:
             # Aguarda um pouco entre publicações
             time.sleep(1)
 
-        print("\n[Publicador] Publicação automática concluída")
+        print("\n[Editor] Publicação automática concluída")
         time.sleep(1)
         self.disconnect()
 

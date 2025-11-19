@@ -13,6 +13,7 @@ class MessageType:
     SUBSCRIBE = "INSCREVER"
     UNSUBSCRIBE = "REMOVER"
     LIST_CATEGORIES = "LISTAR"
+    HISTORY = "HISTORICO"
     DISCONNECT = "SAIR"
 
     # Editor -> Servidor
@@ -20,6 +21,7 @@ class MessageType:
 
     # Servidor -> Cliente
     NEWS_UPDATE = "NOTICIA"
+    NEWS_HISTORY = "HISTORICO_LISTA"
     SUCCESS = "SUCESSO"
     ERROR = "ERRO"
     CATEGORIES_LIST = "CATEGORIAS"
@@ -104,3 +106,16 @@ class Message:
     def categories_list(categories: List[str]) -> str:
         """Cria mensagem com lista de categorias"""
         return Message.create(MessageType.CATEGORIES_LIST, {"categories": categories})
+
+    @staticmethod
+    def request_history(category: str = None, limit: int = 10) -> str:
+        """Cria mensagem de solicitação de histórico"""
+        data = {"limit": limit}
+        if category:
+            data["category"] = category
+        return Message.create(MessageType.HISTORY, data)
+
+    @staticmethod
+    def news_history(news_list: List[Dict[str, Any]]) -> str:
+        """Cria mensagem com lista de notícias do histórico"""
+        return Message.create(MessageType.NEWS_HISTORY, {"news": news_list})
