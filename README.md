@@ -75,7 +75,7 @@ Não há dependências externas. Usa apenas a biblioteca padrão do Python.
 
 ```bash
 # Clone o repositório
-git clone <repository-url>
+git clone https://github.com/gabriela-sotero/news-feed-pubsub
 cd news-feed-pubsub
 
 # Python 3.7+ é necessário
