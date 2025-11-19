@@ -171,13 +171,14 @@ class NewsClient:
             return
 
         print("\nComandos disponíveis:")
-        print("  INSCREVER <categoria>  - Inscreve em uma categoria")
-        print("  REMOVER <categoria>    - Remove inscrição de uma categoria")
+        print("  INSCREVER <categorias> - Inscreve em uma ou mais categorias (separadas por vírgula)")
+        print("  REMOVER <categorias>   - Remove inscrição de uma ou mais categorias")
         print("  LISTAR                 - Lista categorias disponíveis")
         print("  SAIR                   - Desconecta do servidor")
         print("\nExemplos:")
         print("  INSCREVER tecnologia")
-        print("  REMOVER esportes")
+        print("  INSCREVER cultura, tecnologia")
+        print("  REMOVER esportes, política")
         print()
 
         try:
@@ -193,15 +194,23 @@ class NewsClient:
 
                     if cmd == "INSCREVER":
                         if len(parts) < 2:
-                            print("✗ Uso: INSCREVER <categoria>")
+                            print("✗ Uso: INSCREVER <categoria1>[, categoria2, ...]")
                         else:
-                            self.subscribe(parts[1].lower())
+                            # Separa múltiplas categorias por vírgula
+                            categories = [cat.strip().lower() for cat in parts[1].split(',')]
+                            for category in categories:
+                                if category:
+                                    self.subscribe(category)
 
                     elif cmd == "REMOVER":
                         if len(parts) < 2:
-                            print("✗ Uso: REMOVER <categoria>")
+                            print("✗ Uso: REMOVER <categoria1>[, categoria2, ...]")
                         else:
-                            self.unsubscribe(parts[1].lower())
+                            # Separa múltiplas categorias por vírgula
+                            categories = [cat.strip().lower() for cat in parts[1].split(',')]
+                            for category in categories:
+                                if category:
+                                    self.unsubscribe(category)
 
                     elif cmd == "LISTAR":
                         self.list_categories()
