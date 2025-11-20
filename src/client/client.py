@@ -7,7 +7,6 @@ import socket
 import threading
 import sys
 import os
-import re
 from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,7 +16,7 @@ from common.config import DEFAULT_HOST, DEFAULT_PORT, BUFFER_SIZE, ENCODING, DEF
 from common.ui_helpers import (
     normalize_command, normalize_category, suggest_category,
     display_news_rich, display_history_rich, display_categories_rich,
-    print_welcome_banner, show_contextual_help,
+    show_contextual_help,
     RICH_AVAILABLE, console
 )
 
@@ -44,7 +43,6 @@ class NewsClient:
         # Configuração da sessão (não persiste)
         self.session_config = {
             'user_name': None,
-            'display_mode': 'full',
             'initial_categories': []
         }
 
@@ -195,11 +193,11 @@ class NewsClient:
         if msg_type == MessageType.NEWS_UPDATE:
             # Nova notícia recebida
             title = data.get("title", "")
-            summary = data.get("summary", "")
+            lead = data.get("lead", "")
             category = data.get("category", "")
 
             # Exibe com formatação rica
-            display_news_rich(title, summary, category)
+            display_news_rich(title, lead, category)
 
             # Atualiza contadores
             self.news_received_count += 1
@@ -230,8 +228,7 @@ class NewsClient:
 
         elif msg_type == MessageType.NEWS_HISTORY:
             news_list = data.get("news", [])
-            display_mode = self.session_config.get('display_mode', 'detailed')
-            display_history_rich(news_list, mode=display_mode)
+            display_history_rich(news_list, mode='full')
 
     def _send_message(self, message: str):
         """
@@ -498,22 +495,30 @@ class NewsClient:
         print("\n📂 Quais categorias te interessam?")
         print("\nCategorias disponíveis:")
 
-        categories_list = [
-            ('1', 'tecnologia', '💻 Tecnologia'),
-            ('2', 'esportes', '⚽ Esportes'),
-            ('3', 'cultura', '🎭 Cultura'),
-            ('4', 'politica', '🏛️  Política'),
-            ('5', 'economia', '💰 Economia'),
-            ('6', 'entretenimento', '🎬 Entretenimento')
-        ]
+        # Gera lista dinâmica de categorias
+        from common.ui_helpers import CATEGORY_EMOJIS
 
-        for num, cat, label in categories_list:
-            print(f"  {num}. {label}")
+        # Separa "todas" das outras categorias
+        other_cats = [cat for cat in DEFAULT_CATEGORIES if cat != 'todas']
+        sorted_cats = sorted(other_cats)
 
-        print("  7. 📰 Todas")
+        # Monta lista começando com "todas" (0) e depois as outras (1+)
+        categories_list = []
+
+        # Adiciona "todas" como opção 0
+        if 'todas' in DEFAULT_CATEGORIES:
+            emoji = CATEGORY_EMOJIS.get('todas', '📰')
+            print(f"  0. {emoji} Todas")
+
+        # Adiciona outras categorias numeradas
+        for idx, cat in enumerate(sorted_cats, 1):
+            emoji = CATEGORY_EMOJIS.get(cat, '📌')
+            cat_display = cat.capitalize()
+            print(f"  {idx}. {emoji} {cat_display}")
+            categories_list.append((str(idx), cat))
 
         print("\nDigite os números separados por vírgula (ex: 1,2,6)")
-        print("Ou digite 7 para inscrever em todas")
+        print("Ou digite 0 para inscrever em todas")
         print("Ou deixe em branco para escolher depois:")
 
         choices = input("> ").strip()
@@ -524,13 +529,13 @@ class NewsClient:
                 selected_categories = []
 
                 # Verifica se selecionou "Todas"
-                if '7' in selected_nums:
-                    # Adiciona todas as categorias
-                    for num, cat, _ in categories_list:
-                        selected_categories.append(cat)
+                if '0' in selected_nums:
+                    # Adiciona categoria "todas"
+                    if 'todas' in DEFAULT_CATEGORIES:
+                        selected_categories.append('todas')
                 else:
                     # Processa seleção individual
-                    for num, cat, _ in categories_list:
+                    for num, cat in categories_list:
                         if num in selected_nums:
                             selected_categories.append(cat)
 

@@ -46,13 +46,13 @@ class NewsStorage:
         except Exception as e:
             print(f"[Storage] Erro ao salvar arquivo: {e}")
 
-    def add_news(self, title: str, summary: str, category: str) -> Dict[str, Any]:
+    def add_news(self, title: str, lead: str, category: str) -> Dict[str, Any]:
         """
         Adiciona uma nova notícia ao armazenamento.
 
         Args:
             title: Título da notícia
-            summary: Resumo da notícia
+            lead: Lead da notícia
             category: Categoria da notícia
 
         Returns:
@@ -62,7 +62,7 @@ class NewsStorage:
             news = {
                 "id": len(self.news_list) + 1,
                 "title": title,
-                "summary": summary,
+                "lead": lead,
                 "category": category.lower(),
                 "timestamp": datetime.now().isoformat()
             }
@@ -108,3 +108,46 @@ class NewsStorage:
         """Retorna o número total de notícias armazenadas"""
         with self.lock:
             return len(self.news_list)
+
+    def clear_history(self):
+        """Limpa todo o histórico de notícias"""
+        with self.lock:
+            self.news_list = []
+            self._save_to_file()
+            print("[Storage] Histórico de notícias limpo")
+
+    def remove_news_by_ids(self, news_ids: List[int]) -> tuple[int, List[int]]:
+        """
+        Remove notícias específicas pelo ID.
+
+        Args:
+            news_ids: Lista de IDs das notícias a remover
+
+        Returns:
+            Tupla com (quantidade removida, IDs não encontrados)
+        """
+        with self.lock:
+            initial_count = len(self.news_list)
+            not_found = []
+
+            # Filtra as notícias que NÃO devem ser removidas
+            self.news_list = [n for n in self.news_list if n["id"] not in news_ids]
+
+            # Verifica quais IDs não foram encontrados
+            removed_ids = set()
+            for news in self.news_list:
+                if news["id"] in news_ids:
+                    removed_ids.add(news["id"])
+
+            for news_id in news_ids:
+                if news_id not in removed_ids:
+                    # Verifica se o ID realmente não existia
+                    not_found.append(news_id)
+
+            removed_count = initial_count - len(self.news_list)
+
+            if removed_count > 0:
+                self._save_to_file()
+                print(f"[Storage] {removed_count} notícia(s) removida(s)")
+
+            return removed_count, not_found

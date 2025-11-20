@@ -119,9 +119,7 @@ class NewsServer:
 
         try:
             # Envia mensagem de boas-vindas
-            welcome_msg = Message.success(
-                f"Conectado ao servidor de notícias! Categorias: {', '.join(DEFAULT_CATEGORIES)}"
-            )
+            welcome_msg = Message.success("Conectado ao servidor de notícias!")
             self._send_to_client(client_socket, welcome_msg)
 
             # Buffer para mensagens incompletas
@@ -213,21 +211,51 @@ class NewsServer:
             response = Message.news_history(news_list)
             self._send_to_client(client_socket, response)
 
+        elif msg_type == MessageType.CLEAR_HISTORY:
+            # Editor solicitou limpeza do histórico
+            self.news_storage.clear_history()
+            print(f"[Editor {client_id}] Histórico de notícias limpo")
+            response = Message.success("Histórico de notícias limpo com sucesso")
+            self._send_to_client(client_socket, response)
+
+        elif msg_type == MessageType.REMOVE_NEWS:
+            # Editor solicitou remoção de notícias específicas
+            news_ids = data.get("news_ids", [])
+
+            if not news_ids:
+                response = Message.error("Nenhum ID de notícia fornecido")
+                self._send_to_client(client_socket, response)
+                return
+
+            removed_count, not_found = self.news_storage.remove_news_by_ids(news_ids)
+
+            print(f"[Editor {client_id}] Removeu {removed_count} notícia(s): IDs {news_ids}")
+
+            if removed_count > 0:
+                msg = f"{removed_count} notícia(s) removida(s) com sucesso"
+                if not_found:
+                    msg += f" (IDs não encontrados: {', '.join(map(str, not_found))})"
+                response = Message.success(msg)
+            else:
+                response = Message.error(f"Nenhuma notícia encontrada com os IDs: {', '.join(map(str, news_ids))}")
+
+            self._send_to_client(client_socket, response)
+
         elif msg_type == MessageType.PUBLISH:
             # Recebe notícia de um editor
             title = data.get("title", "")
-            summary = data.get("summary", "")
+            lead = data.get("lead", "")
             category = data.get("category", "").lower()
 
             if category in self.subscription_manager.get_available_categories():
                 # Armazena a notícia
-                news = self.news_storage.add_news(title, summary, category)
+                news = self.news_storage.add_news(title, lead, category)
                 self.news_published += 1
 
                 print(f"[Editor {client_id}] Nova notícia publicada em '{category}': {title}")
 
                 # Distribui para todos os inscritos
-                self._broadcast_news(title, summary, category)
+                self._broadcast_news(title, lead, category)
 
                 response = Message.success(f"Notícia publicada com sucesso (ID: {news['id']})")
             else:
@@ -244,17 +272,17 @@ class NewsServer:
             response = Message.error(f"Comando '{msg_type}' não reconhecido")
             self._send_to_client(client_socket, response)
 
-    def _broadcast_news(self, title: str, summary: str, category: str):
+    def _broadcast_news(self, title: str, lead: str, category: str):
         """
         Transmite uma notícia para todos os clientes inscritos na categoria.
 
         Args:
             title: Título da notícia
-            summary: Resumo da notícia
+            lead: Lead da notícia
             category: Categoria da notícia
         """
         subscribers = self.subscription_manager.get_subscribers(category)
-        news_msg = Message.news_update(title, summary, category)
+        news_msg = Message.news_update(title, lead, category)
 
         print(f"[Servidor] Distribuindo notícia de '{category}' para {len(subscribers)} cliente(s)")
 

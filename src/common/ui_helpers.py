@@ -33,12 +33,22 @@ COMMAND_ALIASES = {
 
 # Emojis por categoria
 CATEGORY_EMOJIS = {
+    'todas': '📰',
     'tecnologia': '💻',
     'esportes': '⚽',
     'cultura': '🎭',
     'politica': '🏛️',
     'economia': '💰',
-    'entretenimento': '🎬'
+    'entretenimento': '🎬',
+    'musica': '🎵',
+    'saude': '🏥',
+    'ciencia': '🔬',
+    'educacao': '📚',
+    'moda': '👗',
+    'gastronomia': '🍽️',
+    'viagem': '✈️',
+    'negocios': '💼',
+    'meio-ambiente': '🌱'
 }
 
 # Aliases de categorias
@@ -131,13 +141,13 @@ def suggest_category(input_cat: str, available_categories: List[str]) -> Optiona
     return matches[0] if matches else None
 
 
-def display_news_rich(title: str, summary: str, category: str, timestamp: str = None):
+def display_news_rich(title: str, lead: str, category: str, timestamp: str = None):
     """
     Exibe notícia com formatação rica usando Rich.
 
     Args:
         title: Título da notícia
-        summary: Resumo da notícia
+        lead: Lead da notícia
         category: Categoria da notícia
         timestamp: Timestamp da notícia (opcional)
     """
@@ -147,7 +157,7 @@ def display_news_rich(title: str, summary: str, category: str, timestamp: str = 
         print(f"📰 NOVA NOTÍCIA - [{category.upper()}]")
         print(f"{'='*60}")
         print(f"Título: {title}")
-        print(f"Resumo: {summary}")
+        print(f"Lead: {lead}")
         if timestamp:
             print(f"Data: {timestamp}")
         print(f"{'='*60}\n")
@@ -160,7 +170,7 @@ def display_news_rich(title: str, summary: str, category: str, timestamp: str = 
 
 **Categoria:** {category.upper()}
 
-{summary}
+{lead}
 """
 
     if timestamp:
@@ -183,7 +193,7 @@ def display_history_rich(news_list: List[Dict[str, Any]], mode: str = 'detailed'
 
     Args:
         news_list: Lista de notícias
-        mode: Modo de exibição ('compact', 'detailed', 'full')
+        mode: Modo de exibição ('detailed', 'full')
     """
     if not news_list:
         if RICH_AVAILABLE:
@@ -192,7 +202,7 @@ def display_history_rich(news_list: List[Dict[str, Any]], mode: str = 'detailed'
             print("\n📭 Nenhuma notícia encontrada no histórico.")
         return
 
-    if not RICH_AVAILABLE or mode == 'compact':
+    if not RICH_AVAILABLE:
         # Display simples
         print(f"\n{'='*60}")
         print(f"📚 HISTÓRICO - {len(news_list)} notícia(s)")
@@ -200,9 +210,8 @@ def display_history_rich(news_list: List[Dict[str, Any]], mode: str = 'detailed'
         for news in news_list:
             emoji = CATEGORY_EMOJIS.get(news['category'], '📰')
             print(f"\n{emoji} [{news['category'].upper()}] {news['title']}")
-            if mode != 'compact':
-                print(f"   {news['summary']}")
-                print(f"   {news['timestamp'][:19].replace('T', ' ')}")
+            print(f"   {news['lead']}")
+            print(f"   {news['timestamp'][:19].replace('T', ' ')}")
             print(f"{'-'*60}")
         print()
         return
@@ -215,31 +224,21 @@ def display_history_rich(news_list: List[Dict[str, Any]], mode: str = 'detailed'
         box=box.ROUNDED
     )
 
-    if mode == 'compact':
-        table.add_column("Categoria", style="cyan", width=15)
-        table.add_column("Título", style="white")
-
-        for news in news_list:
-            emoji = CATEGORY_EMOJIS.get(news['category'], '📰')
-            table.add_row(
-                f"{emoji} {news['category'].upper()}",
-                news['title']
-            )
-    elif mode == 'full':
+    if mode == 'full':
         table.add_column("ID", style="dim", width=6)
         table.add_column("Categoria", style="cyan", width=15)
         table.add_column("Título", style="white", width=30)
-        table.add_column("Resumo", style="bright_black", width=40)
+        table.add_column("Lead", style="bright_black", width=40)
         table.add_column("Data", style="green", width=19)
 
         for news in news_list:
             emoji = CATEGORY_EMOJIS.get(news['category'], '📰')
-            summary_short = news['summary'][:40] + '...' if len(news['summary']) > 40 else news['summary']
+            lead_short = news['lead'][:40] + '...' if len(news['lead']) > 40 else news['lead']
             table.add_row(
                 str(news['id']),
                 f"{emoji} {news['category'].upper()}",
                 news['title'][:30] + '...' if len(news['title']) > 30 else news['title'],
-                summary_short,
+                lead_short,
                 news['timestamp'][:19].replace('T', ' ')
             )
     else:  # detailed
@@ -269,82 +268,50 @@ def display_categories_rich(categories: List[str], subscriptions: set = None):
     if subscriptions is None:
         subscriptions = set()
 
-    # Menu numerado das categorias
-    categories_menu = [
-        ('1', 'tecnologia', '💻 Tecnologia'),
-        ('2', 'esportes', '⚽ Esportes'),
-        ('3', 'cultura', '🎭 Cultura'),
-        ('4', 'politica', '🏛️  Política'),
-        ('5', 'economia', '💰 Economia'),
-        ('6', 'entretenimento', '🎬 Entretenimento')
-    ]
+    # Separa "todas" das outras categorias
+    has_todas = 'todas' in categories
+    other_categories = [cat for cat in categories if cat != 'todas']
+    sorted_categories = sorted(other_categories)
 
     if RICH_AVAILABLE:
         console.print("\n[bold cyan]📂 Categorias Disponíveis:[/bold cyan]\n")
     else:
         print("\n📂 Categorias Disponíveis:\n")
 
-    for num, cat, label in categories_menu:
+    # Exibe "todas" como item 0 se existir
+    if has_todas:
+        emoji = CATEGORY_EMOJIS.get('todas', '📌')
+        status = "[green]✓[/green]" if 'todas' in subscriptions else ("[dim]○[/dim]" if RICH_AVAILABLE else "○")
+
+        if RICH_AVAILABLE:
+            console.print(f"  0. {status} {emoji} Todas")
+        else:
+            print(f"  0. {status} {emoji} Todas")
+
+    # Exibe outras categorias começando do 1
+    for idx, cat in enumerate(sorted_categories, 1):
+        # Busca emoji específico ou usa um padrão
+        emoji = CATEGORY_EMOJIS.get(cat, '📌')
+
+        # Formata o nome da categoria (primeira letra maiúscula)
+        cat_display = cat.capitalize()
+
+        # Status de inscrição
         if cat in subscriptions:
             status = "[green]✓[/green]" if RICH_AVAILABLE else "✓"
         else:
             status = "[dim]○[/dim]" if RICH_AVAILABLE else "○"
 
         if RICH_AVAILABLE:
-            console.print(f"  {num}. {status} {label}")
+            console.print(f"  {idx}. {status} {emoji} {cat_display}")
         else:
-            print(f"  {num}. {status} {label}")
+            print(f"  {idx}. {status} {emoji} {cat_display}")
 
     if subscriptions:
         if RICH_AVAILABLE:
             console.print(f"\n[green]✓[/green] Você está inscrito em: [bold]{', '.join(sorted(subscriptions))}[/bold]")
         else:
             print(f"\n✓ Você está inscrito em: {', '.join(sorted(subscriptions))}")
-
-
-def print_welcome_banner():
-    """Exibe banner de boas-vindas."""
-    if RICH_AVAILABLE:
-        console.print(Panel(
-            "[bold cyan]Feed de Notícias PUB/SUB[/bold cyan]\n"
-            "Sistema de notícias em tempo real\n\n"
-            "💡 Digite [bold]HELP[/bold] para ver comandos\n"
-            "💡 Use [bold]Tab[/bold] para autocompletar",
-            title="[bold green]Bem-vindo![/bold green]",
-            border_style="green"
-        ))
-    else:
-        print("\n" + "="*60)
-        print("        Feed de Notícias PUB/SUB")
-        print("    Sistema de notícias em tempo real")
-        print("="*60)
-        print("\n💡 Digite HELP para ver comandos\n")
-
-
-def print_status_bar(connected: bool, subscriptions: set, news_count: int):
-    """
-    Exibe barra de status.
-
-    Args:
-        connected: Se está conectado
-        subscriptions: Set de categorias inscritas
-        news_count: Número de notícias recebidas
-    """
-    status_icon = '🟢' if connected else '🔴'
-    status_text = 'Conectado' if connected else 'Desconectado'
-    time_str = datetime.now().strftime('%H:%M:%S')
-
-    status = (
-        f"{status_icon} {status_text} | "
-        f"📊 {len(subscriptions)} categoria(s) | "
-        f"📰 {news_count} notícia(s) | "
-        f"🕐 {time_str}"
-    )
-
-    if RICH_AVAILABLE:
-        console.print(f"[dim]{status}[/dim]")
-    else:
-        print(status)
 
 
 def show_contextual_help(subscriptions: set):
@@ -413,8 +380,3 @@ def show_contextual_help(subscriptions: set):
         if subscriptions:
             print(f"\nSuas assinaturas: {', '.join(sorted(subscriptions))}")
         print("="*60 + "\n")
-
-
-def clear_screen():
-    """Limpa a tela do terminal."""
-    os.system('cls' if os.name == 'nt' else 'clear')

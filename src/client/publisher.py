@@ -39,6 +39,10 @@ class NewsPublisher:
         self.connected = False
         self.news_published = 0
 
+        # Para operação de remoção interativa
+        self.pending_news_list = None
+        self.waiting_for_news_list = False
+
         # Prompt session com autocomplete e histórico
         if PROMPT_TOOLKIT_AVAILABLE:
             from pathlib import Path
@@ -47,7 +51,7 @@ class NewsPublisher:
             history_file = Path.home() / '.news_publisher_history'
 
             completer = WordCompleter(
-                ['PUBLICAR', 'LISTAR', 'HISTORICO', 'SAIR', 'HELP'] +
+                ['PUBLICAR', 'LISTAR', 'HISTORICO', 'REMOVER', 'LIMPAR', 'SAIR', 'HELP'] +
                 list(DEFAULT_CATEGORIES),
                 ignore_case=True,
                 sentence=True
@@ -72,11 +76,6 @@ class NewsPublisher:
             self.socket.connect((self.host, self.port))
             self.connected = True
             self.running = True
-
-            if RICH_AVAILABLE:
-                console.print(f"[green]✓[/green] Conectado ao servidor {self.host}:{self.port}\n")
-            else:
-                print(f"✓ Conectado ao servidor {self.host}:{self.port}\n")
 
             # Inicia thread para receber respostas
             receive_thread = threading.Thread(target=self._receive_messages)
@@ -190,10 +189,19 @@ class NewsPublisher:
         elif msg_type == MessageType.CATEGORIES_LIST:
             categories = data.get("categories", [])
             display_categories_rich(categories)
+            # Adiciona quebra de linha após as categorias
+            print()
 
         elif msg_type == MessageType.NEWS_HISTORY:
             news_list = data.get("news", [])
-            display_history_rich(news_list, mode='detailed')
+
+            # Se estiver esperando lista para remover, armazena
+            if self.waiting_for_news_list:
+                self.pending_news_list = news_list
+                self.waiting_for_news_list = False
+            else:
+                # Exibição normal do histórico
+                display_history_rich(news_list, mode='detailed')
 
     def _send_message(self, message: str):
         """
@@ -212,16 +220,16 @@ class NewsPublisher:
                     print(f"Erro ao enviar mensagem: {e}")
                 self.connected = False
 
-    def publish_news(self, title: str, summary: str, category: str):
+    def publish_news(self, title: str, lead: str, category: str):
         """
         Publica uma notícia no servidor.
 
         Args:
             title: Título da notícia
-            summary: Resumo da notícia
+            lead: Lead da notícia
             category: Categoria da notícia
         """
-        message = Message.publish_news(title, summary, category)
+        message = Message.publish_news(title, lead, category)
         self._send_message(message)
         self.news_published += 1
 
@@ -232,6 +240,14 @@ class NewsPublisher:
     def request_history(self, category: str = None, limit: int = 10):
         """Solicita histórico de notícias"""
         self._send_message(Message.request_history(category, limit))
+
+    def clear_history(self):
+        """Limpa o histórico de notícias"""
+        self._send_message(Message.create(MessageType.CLEAR_HISTORY))
+
+    def remove_news(self, news_ids: list):
+        """Remove notícias específicas pelo ID"""
+        self._send_message(Message.remove_news(news_ids))
 
     def run_interactive(self):
         """Executa o publicador em modo interativo"""
@@ -315,6 +331,26 @@ class NewsPublisher:
 
             self.request_history(category, limit)
 
+        elif cmd == "REMOVER":
+            self._interactive_remove()
+
+        elif cmd == "LIMPAR":
+            if RICH_AVAILABLE:
+                console.print("[yellow]⚠️  Isso irá limpar TODO o histórico de notícias.[/yellow]")
+                console.print("[cyan]Tem certeza? (s/N):[/cyan] ", end="")
+            else:
+                print("⚠️  Isso irá limpar TODO o histórico de notícias.")
+                print("Tem certeza? (s/N): ", end="")
+
+            confirm = input().strip().lower()
+            if confirm in ['s', 'sim', 'y', 'yes']:
+                self.clear_history()
+            else:
+                if RICH_AVAILABLE:
+                    console.print("[yellow]Operação cancelada.[/yellow]")
+                else:
+                    print("Operação cancelada.")
+
         elif cmd == "HELP":
             self._show_help()
 
@@ -334,6 +370,180 @@ class NewsPublisher:
                 print(f"✗ Comando desconhecido: {command.split()[0]}")
                 print("💡 Digite HELP para ver comandos")
 
+    def _interactive_remove(self):
+        """Modo interativo para remover notícias específicas"""
+        import time
+
+        try:
+            if RICH_AVAILABLE:
+                console.print("\n[yellow]Carregando histórico de notícias...[/yellow]")
+            else:
+                print("\nCarregando histórico de notícias...")
+
+            # Solicita histórico completo
+            self.waiting_for_news_list = True
+            self.pending_news_list = None
+            self.request_history(category=None, limit=100)
+
+            # Aguarda a resposta (com timeout)
+            max_wait = 5  # segundos
+            waited = 0
+            while self.waiting_for_news_list and waited < max_wait:
+                time.sleep(0.1)
+                waited += 0.1
+
+            if self.waiting_for_news_list or not self.pending_news_list:
+                if RICH_AVAILABLE:
+                    console.print("[red]✗[/red] Timeout ao carregar histórico")
+                else:
+                    print("✗ Timeout ao carregar histórico")
+                self.waiting_for_news_list = False
+                return
+
+            news_list = self.pending_news_list
+            self.pending_news_list = None
+
+            if not news_list:
+                if RICH_AVAILABLE:
+                    console.print("[yellow]Nenhuma notícia no histórico[/yellow]")
+                else:
+                    print("Nenhuma notícia no histórico")
+                return
+
+            # Mostra notícias enumeradas
+            if RICH_AVAILABLE:
+                from rich.table import Table
+                from rich.panel import Panel
+
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("#", style="dim", width=6)
+                table.add_column("ID", width=6)
+                table.add_column("Categoria", width=15)
+                table.add_column("Título", width=40)
+                table.add_column("Data", width=16)
+
+                for idx, news in enumerate(news_list, 1):
+                    news_id = news.get("id", "?")
+                    category = news.get("category", "").upper()
+                    title = news.get("title", "")
+                    timestamp = news.get("timestamp", "")
+
+                    # Trunca título se muito longo
+                    if len(title) > 40:
+                        title = title[:37] + "..."
+
+                    # Formata timestamp
+                    if timestamp:
+                        try:
+                            from datetime import datetime
+                            dt = datetime.fromisoformat(timestamp)
+                            timestamp = dt.strftime("%d/%m/%y %H:%M")
+                        except:
+                            pass
+
+                    emoji = CATEGORY_EMOJIS.get(category.lower(), '📰')
+                    table.add_row(str(idx), str(news_id), f"{emoji} {category}", title, timestamp)
+
+                console.print("\n")
+                console.print(Panel(table, title="[bold green]Histórico de Notícias[/bold green]", border_style="green"))
+            else:
+                print("\n" + "="*80)
+                print("HISTÓRICO DE NOTÍCIAS")
+                print("="*80)
+                for idx, news in enumerate(news_list, 1):
+                    news_id = news.get("id", "?")
+                    category = news.get("category", "").upper()
+                    title = news.get("title", "")
+                    print(f"{idx}. [ID:{news_id}] [{category}] {title}")
+                print("="*80)
+
+            # Solicita números para remover
+            if RICH_AVAILABLE:
+                console.print("\n[cyan]Digite os números das notícias a remover (separados por vírgula ou espaço):[/cyan]")
+                console.print("[dim]Exemplo: 1,3,5 ou 1 3 5[/dim]")
+            else:
+                print("\nDigite os números das notícias a remover (separados por vírgula ou espaço):")
+                print("Exemplo: 1,3,5 ou 1 3 5")
+
+            if self.prompt_session:
+                selection = self.prompt_session.prompt('Números: ')
+            else:
+                selection = input("Números: ")
+
+            selection = selection.strip()
+
+            if not selection:
+                if RICH_AVAILABLE:
+                    console.print("[yellow]Operação cancelada.[/yellow]")
+                else:
+                    print("Operação cancelada.")
+                return
+
+            # Processa a seleção
+            selected_indices = []
+            # Aceita vírgula ou espaço como separador
+            parts = selection.replace(',', ' ').split()
+
+            for part in parts:
+                try:
+                    idx = int(part)
+                    if 1 <= idx <= len(news_list):
+                        selected_indices.append(idx)
+                    else:
+                        if RICH_AVAILABLE:
+                            console.print(f"[yellow]⚠️  Número {idx} fora do intervalo[/yellow]")
+                        else:
+                            print(f"⚠️  Número {idx} fora do intervalo")
+                except ValueError:
+                    if RICH_AVAILABLE:
+                        console.print(f"[yellow]⚠️  '{part}' não é um número válido[/yellow]")
+                    else:
+                        print(f"⚠️  '{part}' não é um número válido")
+
+            if not selected_indices:
+                if RICH_AVAILABLE:
+                    console.print("[red]✗[/red] Nenhuma notícia válida selecionada")
+                else:
+                    print("✗ Nenhuma notícia válida selecionada")
+                return
+
+            # Converte índices para IDs
+            news_ids = [news_list[idx - 1]["id"] for idx in selected_indices]
+
+            # Mostra preview das notícias a remover
+            if RICH_AVAILABLE:
+                console.print(f"\n[yellow]Você vai remover {len(news_ids)} notícia(s):[/yellow]")
+                for idx in selected_indices:
+                    news = news_list[idx - 1]
+                    console.print(f"  • [bold]{news['title']}[/bold] [{news['category'].upper()}]")
+            else:
+                print(f"\nVocê vai remover {len(news_ids)} notícia(s):")
+                for idx in selected_indices:
+                    news = news_list[idx - 1]
+                    print(f"  • {news['title']} [{news['category'].upper()}]")
+
+            # Confirmação
+            if RICH_AVAILABLE:
+                console.print("\n[cyan]Confirmar remoção? (s/N):[/cyan] ", end="")
+            else:
+                print("\nConfirmar remoção? (s/N): ", end="")
+
+            confirm = input().strip().lower()
+
+            if confirm in ['s', 'sim', 'y', 'yes']:
+                self.remove_news(news_ids)
+            else:
+                if RICH_AVAILABLE:
+                    console.print("[yellow]Operação cancelada.[/yellow]")
+                else:
+                    print("Operação cancelada.")
+
+        except (EOFError, KeyboardInterrupt):
+            if RICH_AVAILABLE:
+                console.print("\n[yellow]Operação cancelada[/yellow]")
+            else:
+                print("\nOperação cancelada")
+
     def _show_help(self):
         """Mostra ajuda do publicador"""
         if RICH_AVAILABLE:
@@ -344,6 +554,8 @@ class NewsPublisher:
   [bold]PUBLICAR[/bold]               - Publica uma nova notícia
   [bold]LISTAR[/bold]                 - Lista categorias disponíveis
   [bold]HISTORICO[/bold] [cat] [N]    - Ver notícias publicadas
+  [bold]REMOVER[/bold]                - Remover notícias específicas
+  [bold]LIMPAR[/bold]                 - Limpar histórico de notícias
   [bold]HELP[/bold]                   - Mostra esta ajuda
   [bold]SAIR[/bold]                   - Desconectar
 
@@ -360,9 +572,15 @@ class NewsPublisher:
             print("\nPUBLICAR           - Publica uma nova notícia")
             print("LISTAR             - Lista categorias disponíveis")
             print("HISTORICO [cat] [N]- Ver notícias publicadas")
+            print("REMOVER            - Remover notícias específicas")
+            print("LIMPAR             - Limpar histórico de notícias")
             print("HELP               - Ajuda")
             print("SAIR               - Sair")
             print("="*60 + "\n")
+
+        # Exibe categorias disponíveis
+        display_categories_rich(list(DEFAULT_CATEGORIES))
+        print()
 
     def _interactive_publish(self):
         """Modo interativo para publicar notícia"""
@@ -386,18 +604,18 @@ class NewsPublisher:
                     print("✗ Título não pode ser vazio")
                 return
 
-            # Resumo
+            # Lead
             if self.prompt_session:
-                summary = self.prompt_session.prompt('Resumo: ')
+                lead = self.prompt_session.prompt('Lead: ')
             else:
-                summary = input("Resumo: ")
-            summary = summary.strip()
+                lead = input("Lead: ")
+            lead = lead.strip()
 
-            if not summary:
+            if not lead:
                 if RICH_AVAILABLE:
-                    console.print("[red]✗[/red] Resumo não pode ser vazio")
+                    console.print("[red]✗[/red] Lead não pode ser vazio")
                 else:
-                    print("✗ Resumo não pode ser vazio")
+                    print("✗ Lead não pode ser vazio")
                 return
 
             # Categoria
@@ -446,12 +664,18 @@ class NewsPublisher:
                             print("Publicação cancelada.")
                         return
                 else:
+                    # Sem sugestão, mostra categorias disponíveis
                     if RICH_AVAILABLE:
                         console.print(f"[red]✗[/red] Categoria '{category}' não existe.")
-                        console.print("[yellow]💡 Use LISTAR para ver categorias disponíveis[/yellow]")
                     else:
                         print(f"✗ Categoria '{category}' não existe.")
-                        print("💡 Use LISTAR para ver categorias disponíveis")
+
+                    display_categories_rich(list(DEFAULT_CATEGORIES))
+
+                    if RICH_AVAILABLE:
+                        console.print("\n[yellow]Publicação cancelada. Use PUBLICAR novamente para tentar.[/yellow]")
+                    else:
+                        print("\nPublicação cancelada. Use PUBLICAR novamente para tentar.")
                     return
 
             # Preview da notícia
@@ -462,7 +686,7 @@ class NewsPublisher:
                 preview = f"""
 [bold]{title}[/bold]
 
-{summary}
+{lead}
 
 [dim]Categoria: {emoji} {normalized_cat.upper()}[/dim]
 """
@@ -475,7 +699,7 @@ class NewsPublisher:
                 print("PREVIEW")
                 print(f"{'─'*60}")
                 print(f"Título: {title}")
-                print(f"Resumo: {summary}")
+                print(f"Lead: {lead}")
                 print(f"Categoria: {normalized_cat.upper()}")
                 print(f"{'─'*60}")
                 print("\nPublicar esta notícia? (S/n): ", end="")
@@ -488,7 +712,7 @@ class NewsPublisher:
                 else:
                     print(f"\nPublicando notícia em '{normalized_cat}'...")
 
-                self.publish_news(title, summary, normalized_cat)
+                self.publish_news(title, lead, normalized_cat)
             else:
                 if RICH_AVAILABLE:
                     console.print("[yellow]Publicação cancelada.[/yellow]")
@@ -506,7 +730,7 @@ class NewsPublisher:
         Publica notícias automaticamente a partir de uma lista.
 
         Args:
-            news_list: Lista de dicionários com title, summary, category
+            news_list: Lista de dicionários com title, lead, category
         """
         if not self.connect():
             return
@@ -523,7 +747,7 @@ class NewsPublisher:
                 break
 
             title = news.get("title", "")
-            summary = news.get("summary", "")
+            lead = news.get("lead", "")
             category = news.get("category", "")
 
             if RICH_AVAILABLE:
@@ -531,7 +755,7 @@ class NewsPublisher:
             else:
                 print(f"[{i}/{len(news_list)}] Publicando: {title[:50]}...")
 
-            self.publish_news(title, summary, category)
+            self.publish_news(title, lead, category)
 
             # Aguarda um pouco entre publicações
             time.sleep(1)
@@ -563,27 +787,27 @@ def main():
         sample_news = [
             {
                 "title": "Nova versão do Python lançada",
-                "summary": "Python 3.12 traz melhorias de performance e novos recursos",
+                "lead": "Python 3.12 traz melhorias de performance e novos recursos",
                 "category": "tecnologia"
             },
             {
                 "title": "Time local vence campeonato",
-                "summary": "Equipe conquista título após vitória emocionante",
+                "lead": "Equipe conquista título após vitória emocionante",
                 "category": "esportes"
             },
             {
                 "title": "Festival de música acontece no fim de semana",
-                "summary": "Evento contará com artistas nacionais e internacionais",
+                "lead": "Evento contará com artistas nacionais e internacionais",
                 "category": "cultura"
             },
             {
                 "title": "Novas políticas econômicas anunciadas",
-                "summary": "Governo apresenta medidas para controle da inflação",
+                "lead": "Governo apresenta medidas para controle da inflação",
                 "category": "economia"
             },
             {
                 "title": "Série de sucesso ganha nova temporada",
-                "summary": "Produção confirma continuação com elenco original",
+                "lead": "Produção confirma continuação com elenco original",
                 "category": "entretenimento"
             }
         ]

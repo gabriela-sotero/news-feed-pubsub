@@ -18,6 +18,8 @@ class MessageType:
 
     # Editor -> Servidor
     PUBLISH = "PUBLICAR"
+    CLEAR_HISTORY = "LIMPAR"
+    REMOVE_NEWS = "REMOVER_NOTICIAS"
 
     # Servidor -> Cliente
     NEWS_UPDATE = "NOTICIA"
@@ -75,20 +77,20 @@ class Message:
         return Message.create(MessageType.UNSUBSCRIBE, {"category": category})
 
     @staticmethod
-    def publish_news(title: str, summary: str, category: str) -> str:
+    def publish_news(title: str, lead: str, category: str) -> str:
         """Cria mensagem de publicação de notícia"""
         return Message.create(MessageType.PUBLISH, {
             "title": title,
-            "summary": summary,
+            "lead": lead,
             "category": category
         })
 
     @staticmethod
-    def news_update(title: str, summary: str, category: str) -> str:
+    def news_update(title: str, lead: str, category: str) -> str:
         """Cria mensagem de atualização de notícia para cliente"""
         return Message.create(MessageType.NEWS_UPDATE, {
             "title": title,
-            "summary": summary,
+            "lead": lead,
             "category": category
         })
 
@@ -119,3 +121,8 @@ class Message:
     def news_history(news_list: List[Dict[str, Any]]) -> str:
         """Cria mensagem com lista de notícias do histórico"""
         return Message.create(MessageType.NEWS_HISTORY, {"news": news_list})
+
+    @staticmethod
+    def remove_news(news_ids: List[int]) -> str:
+        """Cria mensagem para remover notícias específicas"""
+        return Message.create(MessageType.REMOVE_NEWS, {"news_ids": news_ids})
