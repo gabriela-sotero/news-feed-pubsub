@@ -37,6 +37,25 @@ class SubscriptionManager:
         if category not in self.available_categories:
             return False, f"Categoria '{category}' não existe"
 
+        # Se categoria é "todas", inscreve em todas as categorias
+        if category == "todas":
+            with self.lock:
+                if client_socket not in self.client_subscriptions:
+                    self.client_subscriptions[client_socket] = set()
+
+                # Inscreve em todas as categorias (exceto "todas" para evitar duplicação)
+                count = 0
+                for cat in self.available_categories:
+                    if cat != "todas" and cat not in self.client_subscriptions[client_socket]:
+                        self.subscriptions[cat].add(client_socket)
+                        self.client_subscriptions[client_socket].add(cat)
+                        count += 1
+
+            if count > 0:
+                return True, f"Inscrito em todas as categorias ({count} categorias)"
+            else:
+                return False, "Já inscrito em todas as categorias"
+
         with self.lock:
             # Adiciona cliente ao mapa de assinaturas da categoria
             self.subscriptions[category].add(client_socket)
@@ -64,6 +83,25 @@ class SubscriptionManager:
             Tupla (sucesso, mensagem)
         """
         category = category.lower()
+
+        # Se categoria é "todas", remove de todas as categorias
+        if category == "todas":
+            with self.lock:
+                if client_socket not in self.client_subscriptions:
+                    return False, "Cliente não tem assinaturas"
+
+                # Remove de todas as categorias
+                count = 0
+                for cat in list(self.client_subscriptions[client_socket]):
+                    self.subscriptions[cat].discard(client_socket)
+                    count += 1
+
+                self.client_subscriptions[client_socket].clear()
+
+            if count > 0:
+                return True, f"Removido de todas as categorias ({count} categorias)"
+            else:
+                return False, "Não está inscrito em nenhuma categoria"
 
         with self.lock:
             if client_socket not in self.client_subscriptions:
@@ -126,15 +164,3 @@ class SubscriptionManager:
     def get_available_categories(self) -> List[str]:
         """Retorna lista de categorias disponíveis"""
         return sorted(list(self.available_categories))
-
-    def get_stats(self) -> Dict[str, int]:
-        """
-        Retorna estatísticas de assinaturas.
-
-        Returns:
-            Dicionário com estatísticas por categoria
-        """
-        with self.lock:
-            return {
-                cat: len(subs) for cat, subs in self.subscriptions.items()
-            }

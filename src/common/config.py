@@ -10,12 +10,22 @@ ENCODING = "utf-8"
 
 # Categorias disponíveis
 DEFAULT_CATEGORIES = [
+    "todas",
     "tecnologia",
     "esportes",
     "cultura",
-    "política",
+    "politica",
     "economia",
-    "entretenimento"
+    "entretenimento",
+    "musica",
+    "saude",
+    "ciencia",
+    "educacao",
+    "moda",
+    "gastronomia",
+    "viagem",
+    "negocios",
+    "meio-ambiente"
 ]
 
 # Configurações de armazenamento

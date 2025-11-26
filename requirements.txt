@@ -1,2 +1,5 @@
-# No external dependencies required for basic implementation
-# All functionality uses Python standard library (socket, threading, json)
+# Melhorias de UX/UI
+prompt-toolkit>=3.0.0    # Autocomplete e histórico de comandos
+rich>=13.0.0             # Formatação visual rica (tabelas, painéis, cores)
+
+# Biblioteca padrão já incluída: socket, threading, json
