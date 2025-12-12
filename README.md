@@ -45,25 +45,13 @@ O sistema permite que:
 
 ```
 news-feed-pubsub/
-├── src/
-│   ├── common/              # Código compartilhado
-│   │   ├── protocol.py      # Definições do protocolo
-│   │   ├── config.py        # Configurações
-│   │   └── ui_helpers.py    # Helpers de interface (Rich, emojis, formatação)
-│   ├── server/              # Servidor
-│   │   ├── server.py        # Servidor TCP principal
-│   │   ├── subscription_manager.py  # Gerenciamento de assinaturas
-│   │   └── news_storage.py  # Armazenamento de notícias
-│   └── client/              # Clientes
-│       ├── client.py        # Cliente leitor de notícias
-│       └── publisher.py     # Publicador/editor de notícias
-├── data/                    # Dados persistidos
-│   └── news.json           # Histórico de notícias
-├── run_server.py           # Script para iniciar servidor
-├── run_client.py           # Script para iniciar cliente
-├── run_publisher.py        # Script para iniciar publicador
-├── requirements.txt        # Dependências (rich, prompt_toolkit)
-└── README.md              # Este arquivo
+├── server.py              # Servidor TCP (servidor PUB/SUB)
+├── client.py              # Cliente leitor de notícias
+├── publisher.py           # Publicador/editor de notícias
+├── data/                  # Dados persistidos
+│   └── news.json         # Histórico de notícias (gerado automaticamente)
+├── requirements.txt      # Dependências (rich, prompt_toolkit)
+└── README.md            # Este arquivo
 ```
 
 ## Categorias Disponíveis
@@ -122,12 +110,12 @@ python3 --version
 Em um terminal, execute:
 
 ```bash
-python run_server.py
+python server.py
 ```
 
 Ou com configurações personalizadas:
 ```bash
-python run_server.py --host 0.0.0.0 --port 5555
+python server.py --host 0.0.0.0 --port 5555
 ```
 
 Você verá:
@@ -143,7 +131,7 @@ Você verá:
 Em um **novo terminal**, execute:
 
 ```bash
-python run_client.py
+python client.py
 ```
 
 O cliente iniciará com um **wizard de configuração** interativo:
@@ -209,7 +197,7 @@ O cliente iniciará com um **wizard de configuração** interativo:
 Em um **terceiro terminal**, execute:
 
 ```bash
-python run_publisher.py
+python publisher.py
 ```
 
 **Comandos do publicador:**
@@ -235,16 +223,11 @@ Publicando notícia em 'tecnologia'...
 ✓ Notícia publicada com sucesso (ID: 26)
 ```
 
-**Modo automático (para testes):**
-```bash
-python run_publisher.py --auto
-```
-
 ## Exemplo Completo de Uso
 
 ### Terminal 1 - Servidor
 ```bash
-$ python run_server.py
+$ python server.py
 [Servidor] Iniciado em localhost:5555
 [Servidor] Categorias disponíveis: ciencia, cultura, economia, educacao, entretenimento, esportes, gastronomia, meio-ambiente, moda, musica, negocios, politica, saude, tecnologia, todas, viagem
 [Servidor] 25 notícias no histórico
@@ -259,7 +242,7 @@ $ python run_server.py
 
 ### Terminal 2 - Cliente
 ```bash
-$ python run_client.py
+$ python client.py
 
 ╭─────────────────────── Bem-vindo! ───────────────────────╮
 │  Feed de Notícias PUB/SUB                                │
@@ -300,7 +283,7 @@ $ python run_client.py
 
 ### Terminal 3 - Publicador
 ```bash
-$ python run_publisher.py
+$ python publisher.py
 [Publicador] Conectado ao servidor localhost:5555
 
 ✓ Conectado ao servidor de notícias!
@@ -396,7 +379,7 @@ As notícias são armazenadas em:
 - **Memória**: Para distribuição rápida aos clientes conectados
 - **Arquivo**: `data/news.json` para persistência entre reinicializações
 
-O histórico mantém até 100 notícias (configurável em `src/common/config.py`).
+O histórico mantém até 100 notícias (configurável na constante `MAX_NEWS_HISTORY` em `server.py`).
 
 Exemplo de `data/news.json`:
 ```json
@@ -413,7 +396,7 @@ Exemplo de `data/news.json`:
 
 ## Configurações
 
-Edite `src/common/config.py` para alterar:
+As configurações podem ser alteradas editando as constantes no início de cada arquivo (`server.py`, `client.py`, `publisher.py`):
 
 ```python
 # Configurações de rede
